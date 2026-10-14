@@ -1,0 +1,29 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Lecteur bouton - Chapitre 4</title>
+<style>body{margin:0;text-align:center} #page{width:500px;height:720px}</style></head>
+<body>
+<header><img src="/img/logo.png" alt="logo"></header>
+<div class="manga-reader"><img id="page" src="/img/k7f2.jpg"></div>
+<div class="nav">
+  <button id="prev">Précédent</button>
+  <span id="counter">1 / 6</span>
+  <button id="next">Suivant</button>
+</div>
+<a href="/sites/vertical.html" class="chapter-next">Chapitre suivant</a>
+<script>
+  const pages = ['k7f2.jpg', 'a91c.jpg', 'zz03.jpg', 'm4q8.jpg', 'b0d5.jpg', 'x6y1.jpg'];
+  let i = 0;
+  const show = () => {
+    // Le changement d'image passe par un préchargement asynchrone.
+    const pre = new Image();
+    pre.onload = () => {
+      document.getElementById('page').src = pre.src;
+      document.getElementById('counter').textContent = (i + 1) + ' / ' + pages.length;
+      document.getElementById('next').disabled = i === pages.length - 1;
+    };
+    pre.src = '/img/' + pages[i] + '?delay=150';
+  };
+  document.getElementById('next').onclick = () => { if (i < pages.length - 1) { i++; show(); } };
+  document.getElementById('prev').onclick = () => { if (i > 0) { i--; show(); } };
+</script>
+</body></html>

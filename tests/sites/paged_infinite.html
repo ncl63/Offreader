@@ -1,0 +1,10 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Lecteur infini</title></head>
+<body>
+<div class="reader"><img id="g" src="/gen/1.png" width="300" height="450"></div>
+<button id="n">Next page</button>
+<script>
+  let k = 1;
+  document.getElementById('n').onclick = () => { k++; document.getElementById('g').src = '/gen/' + k + '.png'; };
+</script>
+</body></html>

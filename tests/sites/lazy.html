@@ -1,0 +1,47 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Lazy - Chapitre 2</title>
+<style>body{margin:0} .chapter-content{width:400px;margin:0 auto} .page-wrap img{display:block;width:400px;min-height:600px;background:#eee}
+.page-wrap img.lazy-loaded{min-height:0}</style></head>
+<body>
+<h1>Chapitre 2</h1>
+<div class="chapter-content">
+  <div class="page-wrap page-1"><img class="lazy" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/img/p01.jpg?delay=100"></div>
+  <div class="page-wrap page-2"><img class="lazy" src="/img/placeholder.gif" data-src="/img/p02.webp?delay=100"></div>
+  <div class="page-wrap page-3"><img class="lazy" data-srcset="/img/p03.png?w=small 200w, /img/p03.png 800w"></div>
+  <div class="page-wrap page-4"><img class="lazy" data-original="/img/p04.jpg"></div>
+  <div class="page-wrap page-5"><img loading="lazy" src="/img/p05.jpg"></div>
+  <div class="page-wrap page-6"><img class="lazy" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/img/p06.webp?delay=200"></div>
+  <div class="page-wrap page-7"><img class="lazy" data-src="/img/p07.png"></div>
+  <div class="page-wrap page-8"><img class="lazy" data-src="/img/p08.jpg"></div>
+</div>
+<div id="sentinel" style="height:10px"></div>
+<script>
+  // Chargement différé : l'image n'est chargée qu'en approchant du viewport.
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      const img = e.target;
+      if (img.dataset.srcset) img.srcset = img.dataset.srcset;
+      const src = img.dataset.src || img.dataset.original;
+      if (src) img.src = src;
+      img.classList.remove('lazy'); img.classList.add('lazy-loaded');
+      io.unobserve(img);
+    }
+  }, {rootMargin: '0px'});
+  document.querySelectorAll('img.lazy').forEach(i => io.observe(i));
+  // Chargement infini : deux planches supplémentaires ajoutées en bas de page.
+  let appended = false;
+  new IntersectionObserver((entries) => {
+    if (!entries[0].isIntersecting || appended) return;
+    appended = true;
+    setTimeout(() => {
+      const box = document.querySelector('.chapter-content');
+      for (const name of ['p09.jpg', 'p10.webp']) {
+        const w = document.createElement('div'); w.className = 'page-wrap';
+        const img = document.createElement('img'); img.className = 'lazy'; img.dataset.src = '/img/' + name;
+        w.appendChild(img); box.appendChild(w); io.observe(img);
+      }
+    }, 300);
+  }).observe(document.getElementById('sentinel'));
+</script>
+</body></html>

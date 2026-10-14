@@ -1,0 +1,19 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Lecteur clavier - Chapitre 5</title>
+<style>body{margin:0} #view{width:500px;height:720px;margin:auto;display:block}</style></head>
+<body>
+<div id="app"><img id="view" alt=""></div>
+<script>
+  // État JavaScript uniquement : ni bouton, ni changement d'URL.
+  const state = {page: 0, pages: ['zz03.jpg', 'k7f2.jpg', 'x6y1.jpg', 'a91c.jpg']};
+  const render = () => {
+    const img = document.getElementById('view');
+    img.src = '/img/' + state.pages[state.page] + '?delay=' + (300 + state.page * 100);
+  };
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' && state.page < state.pages.length - 1) { state.page++; render(); }
+    if (e.key === 'ArrowLeft' && state.page > 0) { state.page--; render(); }
+  });
+  render();
+</script>
+</body></html>

@@ -1,0 +1,15 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Lecteur clic en boucle</title>
+<style>body{margin:0} #img{width:500px;height:720px;display:block;margin:auto;cursor:pointer}</style></head>
+<body>
+<div class="viewer"><img id="img" src="/img/m4q8.jpg"></div>
+<script>
+  // Un clic sur l'image avance ; après la dernière page, le lecteur revient au début.
+  const pages = ['m4q8.jpg', 'b0d5.jpg', 'a91c.jpg'];
+  let i = 0;
+  document.getElementById('img').addEventListener('click', () => {
+    i = (i + 1) % pages.length;
+    document.getElementById('img').src = '/img/' + pages[i];
+  });
+</script>
+</body></html>

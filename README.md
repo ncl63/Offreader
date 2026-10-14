@@ -1,0 +1,211 @@
+# Offreader
+
+Outil en ligne de commande qui ouvre un lecteur web dans Chromium, repère les
+planches d'un chapitre, les télécharge **dans leur ordre exact de lecture** et
+les exporte dans un dossier d'images ou une archive **CBZ**.
+
+Aucune configuration n'est nécessaire pour chaque site : deux stratégies
+génériques couvrent les lecteurs les plus courants.
+
+| Type de lecteur | Fonctionnement |
+|---|---|
+| **Défilement vertical** (toutes les planches dans la page) | défilement progressif pour déclencher le lazy loading, tri des images par structure DOM, position et dimensions, déduplication |
+| **Page par page** (une planche à la fois) | repérage de l'image principale, puis navigation automatique : bouton « suivant », touches ← / →, clic sur l'image, numéro de page dans l'URL, liste déroulante des pages |
+
+## Installation sous Windows 11
+
+1. Installer **Python 3.12 ou plus récent** depuis <https://www.python.org/downloads/>
+   (cocher « Add python.exe to PATH » pendant l'installation).
+2. Ouvrir un terminal (PowerShell) dans le dossier du projet, puis :
+
+```powershell
+py -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+playwright install chromium
+```
+
+> Si PowerShell refuse d'exécuter `Activate.ps1`, lancer une fois
+> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, ou utiliser
+> `.venv\Scripts\activate.bat` depuis l'invite de commandes (cmd).
+
+## Utilisation
+
+```powershell
+python manga_downloader.py "URL_DU_CHAPITRE" --format cbz
+```
+
+Le fichier `Nom_du_chapitre.cbz` est créé dans `Téléchargements` (`%USERPROFILE%\Downloads`).
+Le nom vient du titre de la page ; `--name` permet de le choisir.
+
+```
+Analyse du lecteur...
+Mode détecté : page par page
+Pages récupérées : 20 / 20
+Planches détectées (dernière page atteinte (20)) : 20 / 20
+Téléchargement : 100 % (20/20)
+Export CBZ...
+Terminé : 20 planches -> C:\Users\moi\Downloads\Mon chapitre.cbz
+```
+
+### Options
+
+| Option | Rôle | Défaut |
+|---|---|---|
+| `--format cbz\|images` | archive CBZ, ou dossier `001.webp`, `002.jpg`… | `cbz` |
+| `--output DOSSIER` | dossier de destination | `~\Downloads` |
+| `--name NOM` | nom du chapitre (fichier ou dossier) | titre de la page |
+| `--headless` / `--no-headless` | masquer / afficher Chromium | masqué |
+| `--mode auto\|vertical\|paged` | imposer le type de lecteur | `auto` |
+| `--max-pages N` | nombre maximal de pages en mode page par page | 500 |
+| `--timeout S` | délai maximal d'un chargement ou d'un téléchargement (s) | 30 |
+| `--retries N` | nouvelles tentatives par image en cas d'erreur | 4 |
+| `--workers N` | téléchargements simultanés | 4 |
+| `--verbose`, `-v` | journal détaillé (choix de la stratégie, erreurs, essais) | — |
+
+`--no-headless` est utile pour observer le lecteur, ou quand le site demande
+une action manuelle (bandeau de cookies, vérification) : la fenêtre reste
+pilotable pendant l'analyse.
+
+### Codes de sortie
+
+| Code | Signification |
+|---|---|
+| 0 | toutes les planches ont été récupérées et exportées |
+| 1 | erreur (page inaccessible, aucune planche trouvée, Chromium absent…) |
+| 2 | chapitre incomplet : au moins une planche n'a pas pu être téléchargée, ou le lecteur annonce plus de pages que trouvées. **Aucun CBZ n'est créé** ; les planches obtenues sont conservées et la même commande reprend là où elle s'est arrêtée |
+| 130 | interruption (Ctrl+C) ; relancer pour reprendre |
+
+## Fiabilité
+
+- **Ordre garanti** : chaque planche reçoit son numéro avant le téléchargement ;
+  le nom du fichier (`001`, `002`…) ne dépend pas de l'ordre de fin des
+  téléchargements parallèles.
+- **Fichiers d'origine** : aucune conversion ; l'extension correspond au format
+  réel détecté (`.webp`, `.jpg`, `.png`, `.avif`…). Le CBZ est créé sans
+  compression (`ZIP_STORED`) puis relu et vérifié.
+- **Intégrité** : taille annoncée par le serveur, décodage complet par Pillow
+  (fichiers tronqués, pages d'erreur HTML refusés). Écriture atomique
+  (`.part` puis renommage).
+- **Erreurs temporaires** (délai, connexion coupée, HTTP 429/5xx, fichier
+  tronqué) : nouvel essai avec délai progressif (0,5 s, 1 s, 2 s…).
+- **Reprise** : un manifeste `.offreader.json` mémorise l'URL et l'empreinte
+  SHA-256 de chaque fichier ; à la relance, seules les planches manquantes ou
+  abîmées sont retéléchargées.
+- **Pas de blocage** : chaque attente est bornée (chargement, défilement,
+  navigation, téléchargement), ainsi que la durée totale d'analyse (10 min) et
+  le nombre de pages.
+- **Fin de chapitre** (page par page) : compteur « 12 / 20 » ou liste des pages
+  (une fois vérifié qu'il suit la navigation), bouton suivant désactivé, plus
+  aucun changement, retour à une page déjà vue (lecteur en boucle), sortie du
+  chapitre (lien « chapitre suivant » ou URL d'un autre chapitre), page 404.
+- **Session du navigateur** : les cookies, l'User-Agent et le Referer de
+  Chromium sont réutilisés pour les téléchargements, comme le ferait le
+  navigateur. L'outil ne contourne aucun mécanisme de protection.
+
+## Architecture
+
+```
+manga_downloader.py         point d'entrée CLI
+offreader/
+├── cli.py                  arguments, affichage de la progression, codes de sortie
+├── engine.py               orchestration : analyse → téléchargement → vérification → export
+├── config.py               paramètres (délais, limites, parallélisme)
+├── models.py               Planche (ordre, URL, état…), Extraction, ProgressEvent
+├── browser.py              session Chromium (Playwright), cookies et en-têtes
+├── dom.py                  collecte des <img> dans la page + tri planches / parasites
+├── detector.py             détection automatique du type de lecteur
+├── strategies/
+│   ├── base.py             interface commune Strategy
+│   ├── vertical.py         stratégie A : défilement vertical
+│   └── paged.py            stratégie B : page par page et mécanismes de navigation
+├── adapters/__init__.py    adaptateurs spécifiques à un site (prioritaires)
+├── downloader.py           téléchargements parallèles, retries, contrôle d'intégrité, reprise
+└── exporter.py             dossier / CBZ, noms de fichiers valides sous Windows
+```
+
+Le moteur (`engine.run`) n'affiche rien : il émet des `ProgressEvent` via un
+rappel. Une interface graphique pourra s'y brancher sans modifier le moteur.
+
+### Détection des planches (défilement vertical)
+
+1. Collecte de chaque `<img>` : `currentSrc`, `srcset` (plus grande
+   résolution), `src`, `data-src`, `data-original`, `data-srcset`… ; les
+   espaces réservés (GIF transparent, `placeholder.gif`…) sont ignorés.
+2. Exclusion des images invisibles et des images marquées comme logo,
+   publicité, avatar, miniature, icône (attributs, URL, régies publicitaires).
+3. Regroupement par **structure DOM** (chemin des conteneurs) : le groupe
+   principal est celui qui pèse le plus en surface, centré, avec des indices
+   sémantiques (`reader`, `chapter`…) et sans indice négatif (`sidebar`,
+   `related`, `comments`…).
+4. Dans ce groupe, les intrus de taille ou de format aberrants (bannière) sont
+   écartés ; les images de même structure **pas encore chargées** sont
+   conservées (leur téléchargement sera vérifié, jamais ignoré).
+5. Ordre : position verticale, puis ordre DOM. Doublons : même URL (hors
+   fragment). Deux planches au contenu identique mais aux URL distinctes sont
+   conservées.
+
+Le défilement gère aussi les lecteurs dont la zone défilante est un conteneur
+interne, et le contenu ajouté au fur et à mesure en bas de page.
+
+### Ajouter un adaptateur
+
+Si un lecteur n'est pas correctement analysé par les stratégies génériques
+(rendu en `<canvas>`, images en arrière-plan CSS, liste d'images dans une
+variable JavaScript…), créer un adaptateur dans `offreader/adapters/` : la
+procédure et un exemple complet sont dans la docstring de
+`offreader/adapters/__init__.py`. Il renvoie la même `Extraction` que les
+stratégies génériques ; téléchargement et export restent inchangés.
+
+## Tests
+
+```powershell
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+Les tests démarrent un serveur HTTP local (`tests/server.py`) qui sert des
+lecteurs simulés (`tests/sites/`) et des images générées, et injecte des
+pannes. Ils lancent le programme complet avec un vrai Chromium et vérifient le
+nombre de planches, leur ordre (empreinte de chaque fichier), l'absence de
+doublons accidentels, l'intégrité des fichiers, la validité du CBZ, la reprise
+et l'arrêt du programme :
+
+| Scénario | Fichier |
+|---|---|
+| lecteur vertical classique, formats mixtes | `vertical.html` |
+| lazy loading (`data-src`, `data-srcset`, `loading=lazy`), ajout en bas de page | `lazy.html` |
+| images parasites : logo, pixel, bannière et pub dans le lecteur, miniatures, avatar, image cachée, doublon d'URL, pages identiques | `parasites.html` |
+| défilement dans un conteneur interne | `inner_scroll.html` |
+| page par page, bouton + compteur + lien « chapitre suivant » | `paged_button.html` |
+| navigation JavaScript au clavier, sans bouton ni URL | `paged_keyboard.html` |
+| clic sur l'image, lecteur qui reboucle | `paged_click_loop.html` |
+| liste déroulante des pages | `paged_select.html` |
+| une page par URL avec lien, piège vers le chapitre suivant | `/paged/…`, `/paged-trap/…` |
+| numéro de page dans l'URL uniquement, 404 en fin | `/query?page=N` |
+| lecteur bloqué, lecteur infini (limite de pages) | `paged_stuck.html`, `paged_infinite.html` |
+| erreurs 503, connexion coupée, image tronquée, planche 404 puis reprise | `errors.html`, `gone.html` |
+
+Pour explorer un lecteur de test à la main : `python -m tests.server`.
+
+`examples/exemple_vertical.cbz` a été produit à partir de ces pages de test
+(`python scripts/make_example.py`).
+
+### Chromium déjà installé
+
+Si Chromium est installé ailleurs que là où Playwright l'attend, indiquer son
+chemin dans la variable d'environnement `OFFREADER_CHROMIUM` :
+
+```powershell
+$env:OFFREADER_CHROMIUM = "C:\chemin\vers\chrome.exe"
+```
+
+## Limites connues
+
+- Planches dessinées dans un `<canvas>` ou en image de fond CSS : non détectées
+  par les stratégies génériques (prévoir un adaptateur).
+- Lecteurs verticaux « virtualisés » qui recyclent fortement leurs éléments :
+  pris en charge au mieux ; un adaptateur est plus sûr.
+- En mode page par page sans compteur, la fin est déduite de l'arrêt de la
+  navigation : sur un lecteur clavier, la dernière page attend donc le délai
+  de chargement (`--timeout`, 15 s au plus) avant de conclure.

@@ -1,0 +1,16 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Webtoon - Conteneur interne</title>
+<style>html,body{margin:0;height:100%;overflow:hidden} #scroller{height:100%;overflow-y:auto}
+.strip{width:400px;margin:0 auto} .strip img{display:block;width:400px;height:600px}</style></head>
+<body>
+<div id="scroller"><div class="strip">
+  <img data-src="/img/p01.jpg"><img data-src="/img/p02.webp"><img data-src="/img/p03.png">
+  <img data-src="/img/p04.jpg"><img data-src="/img/p05.jpg"><img data-src="/img/p06.webp">
+</div></div>
+<script>
+  const io = new IntersectionObserver((es) => es.forEach(e => {
+    if (e.isIntersecting) { e.target.src = e.target.dataset.src; io.unobserve(e.target); }
+  }), {root: document.getElementById('scroller')});
+  document.querySelectorAll('.strip img').forEach(i => io.observe(i));
+</script>
+</body></html>
