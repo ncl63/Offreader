@@ -16,7 +16,8 @@ _RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f
 
 def safe_name(name: str, default: str = "chapitre") -> str:
     """Nom de fichier valide sous Windows."""
-    name = _INVALID.sub("_", name or "")
+    name = re.sub(r"\s*:\s*", " - ", name or "")  # « Titre : chapitre » -> « Titre - chapitre »
+    name = _INVALID.sub("_", name)
     name = re.sub(r"\s+", " ", name).strip().rstrip(". ")
     name = name[:120].rstrip(". ")
     if not name or name.upper().split(".")[0] in _RESERVED:

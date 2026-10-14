@@ -21,6 +21,7 @@ class Config:
     browser_executable: str | None = field(
         default_factory=lambda: os.environ.get("OFFREADER_CHROMIUM") or None
     )
+    auto_install_browser: bool = True  # télécharge Chromium si aucun navigateur n'est trouvé
 
     # Navigateur
     navigation_timeout: float = 30.0  # chargement d'une page

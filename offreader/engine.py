@@ -35,7 +35,7 @@ async def extract(url: str, config: Config, on_event: Callable[[ProgressEvent], 
     """Analyse le lecteur. Renvoie l'extraction et l'identité HTTP du navigateur."""
     on_event(ProgressEvent("analysis", "Analyse du lecteur..."))
     deadline = Deadline(config.extraction_timeout)
-    async with BrowserSession(config) as session:
+    async with BrowserSession(config, on_event) as session:
         await session.open(url)
         adapter = find_adapter(url)
         if adapter:

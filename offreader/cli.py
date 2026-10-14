@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .browser import use_bundled_browsers
 from .config import Config, default_output_dir
 from .engine import run
 from .errors import IncompleteChapter, OffreaderError
@@ -94,6 +95,7 @@ def main(argv: list[str] | None = None) -> int:
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(errors="replace")
     args = build_parser().parse_args(argv)
+    use_bundled_browsers()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING,
                         format="%(levelname)s %(name)s: %(message)s")
     if not args.verbose:

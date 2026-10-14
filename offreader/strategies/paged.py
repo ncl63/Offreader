@@ -225,7 +225,7 @@ class PagedStrategy(Strategy):
     async def extract(self) -> Extraction:
         first = await self._wait_main(previous=None, timeout=self.config.step_timeout)
         if first is None:
-            raise NoImagesFound("Aucune image principale n'a été trouvée dans le lecteur.")
+            raise NoImagesFound("Aucune planche n'a été trouvée sur cette page. Vérifiez qu'il s'agit bien de la page de lecture du chapitre.")
         self._path = first.path
         await self._record(first)
 

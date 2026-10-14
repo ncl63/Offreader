@@ -36,6 +36,7 @@ class VerticalStrategy(Strategy):
             state = await self.page.evaluate(SCROLL_STEP_JS, 0.85)
             await self._pause()
             await self._snapshot()
+            self._report_found()
             if state["at_bottom"] and state["height"] == last_height:
                 # En bas : la hauteur doit rester stable un moment (contenu ajouté à la volée).
                 stable_since = stable_since or time.monotonic()
@@ -58,6 +59,12 @@ class VerticalStrategy(Strategy):
         await self.materialize(planches)
         return Extraction(planches=planches, mode=self.mode, title=await self.title(),
                           page_url=self.page.url, end_reason="bas de la page atteint")
+
+    def _report_found(self) -> None:
+        found = len(select_pages(self._merged(), self._doc_width))
+        if found != getattr(self, "_last_found", 0):
+            self._last_found = found
+            self.on_event(ProgressEvent("pages", "Planches repérées", found, 0))
 
     async def _pause(self) -> None:
         await asyncio.sleep(self.config.scroll_delay)

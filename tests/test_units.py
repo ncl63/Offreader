@@ -44,7 +44,8 @@ def test_inspect_image_rejects_truncated_and_html():
 
 
 def test_safe_name_windows():
-    assert safe_name('Série: "Test" / Ch. 1?') == "Série_ _Test_ _ Ch. 1_"
+    assert safe_name('Série: "Test" / Ch. 1?') == "Série - _Test_ _ Ch. 1_"
+    assert safe_name("Boruto Blue Vortex : chapitre 01 FR") == "Boruto Blue Vortex - chapitre 01 FR"
     assert safe_name("CON") == "chapitre"
     assert safe_name("  fin...  ") == "fin"
     assert safe_name("") == "chapitre"

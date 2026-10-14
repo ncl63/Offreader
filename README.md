@@ -12,7 +12,49 @@ génériques couvrent les lecteurs les plus courants.
 | **Défilement vertical** (toutes les planches dans la page) | défilement progressif pour déclencher le lazy loading, tri des images par structure DOM, position et dimensions, déduplication |
 | **Page par page** (une planche à la fois) | repérage de l'image principale, puis navigation automatique : bouton « suivant », touches ← / →, clic sur l'image, numéro de page dans l'URL, liste déroulante des pages |
 
-## Installation sous Windows 11
+## Application Windows
+
+![Offreader](docs/offreader.png)
+
+Collez l'URL du chapitre, choisissez **CBZ** ou **Images**, cliquez sur
+**Télécharger**. À la fin, **Ouvrir le dossier** affiche le fichier dans
+l'Explorateur. Le bouton devient **Annuler** pendant le travail ; un
+téléchargement annulé ou incomplet reprend là où il s'était arrêté.
+
+Le fichier est enregistré dans **`Téléchargements`** (`%USERPROFILE%\Downloads`),
+sous le titre de la page, par exemple :
+`Téléchargements\Boruto Blue Vortex - chapitre 01 FR - Boruto - France.cbz`.
+
+### Option 1 — Lanceur `Offreader.bat` (le plus simple)
+
+1. Installer **Python 3.12 ou plus récent** depuis <https://www.python.org/downloads/>
+   en cochant **« Add python.exe to PATH »**.
+2. Double-cliquer sur **`Offreader.bat`**.
+
+Le premier lancement prépare tout (environnement `.venv`, dépendances,
+Chromium) : quelques minutes, une fenêtre de console affiche l'avancement.
+Les lancements suivants ouvrent directement l'application.
+
+### Option 2 — Exécutable autonome `Offreader.exe`
+
+Sur un poste Windows avec Python 3.12+, double-cliquer sur **`build_exe.bat`**.
+Il produit `dist\Offreader\Offreader.exe` avec Python, Playwright et Chromium
+embarqués (dossier d'environ 400 Mo). Ce dossier peut ensuite être copié sur
+un autre PC Windows **sans Python** : lancer `Offreader.exe`. Copier tout le
+dossier `dist\Offreader`, pas seulement le `.exe`.
+
+### Navigateur
+
+L'application cherche dans l'ordre : le Chromium de Playwright (embarqué ou
+installé), puis **Microsoft Edge** (présent sur tout Windows 11), puis Google
+Chrome ; à défaut, elle télécharge Chromium automatiquement au premier usage.
+
+### En cas de problème
+
+Les erreurs s'affichent en rouge sous la barre de progression. Le journal
+détaillé est dans `%LOCALAPPDATA%\Offreader\offreader.log`.
+
+## Installation en ligne de commande (Windows 11)
 
 1. Installer **Python 3.12 ou plus récent** depuis <https://www.python.org/downloads/>
    (cocher « Add python.exe to PATH » pendant l'installation).
@@ -21,8 +63,9 @@ génériques couvrent les lecteurs les plus courants.
 ```powershell
 py -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install -r requirements-gui.txt
 playwright install chromium
+python offreader_gui.pyw          # application graphique
 ```
 
 > Si PowerShell refuse d'exécuter `Activate.ps1`, lancer une fois
@@ -107,7 +150,13 @@ pilotable pendant l'analyse.
 
 ```
 manga_downloader.py         point d'entrée CLI
+offreader_gui.pyw           point d'entrée de l'application graphique
+Offreader.bat               lanceur Windows (installation automatique au 1er lancement)
+build_exe.bat               construction de dist\Offreader\Offreader.exe (PyInstaller)
+packaging/offreader.spec    spécification PyInstaller
 offreader/
+├── gui.py                  fenêtre CustomTkinter (aucune logique d'extraction)
+├── jobs.py                 moteur dans un thread + file de messages vers l'interface
 ├── cli.py                  arguments, affichage de la progression, codes de sortie
 ├── engine.py               orchestration : analyse → téléchargement → vérification → export
 ├── config.py               paramètres (délais, limites, parallélisme)
@@ -125,7 +174,11 @@ offreader/
 ```
 
 Le moteur (`engine.run`) n'affiche rien : il émet des `ProgressEvent` via un
-rappel. Une interface graphique pourra s'y brancher sans modifier le moteur.
+rappel. La CLI les affiche directement ; l'application graphique passe par
+`jobs.DownloadJob`, qui exécute le moteur dans un thread avec sa propre boucle
+asyncio et transmet progression, erreurs et état final (`done`, `incomplete`,
+`error`, `cancelled`) dans une file que la fenêtre lit toutes les 100 ms :
+l'interface ne se bloque jamais et l'annulation ferme proprement Chromium.
 
 ### Détection des planches (défilement vertical)
 
@@ -160,7 +213,7 @@ stratégies génériques ; téléchargement et export restent inchangés.
 ## Tests
 
 ```powershell
-pip install -r requirements-dev.txt
+pip install -r requirements-dev.txt -r requirements-gui.txt
 python -m pytest
 ```
 
@@ -185,6 +238,23 @@ et l'arrêt du programme :
 | numéro de page dans l'URL uniquement, 404 en fin | `/query?page=N` |
 | lecteur bloqué, lecteur infini (limite de pages) | `paged_stuck.html`, `paged_infinite.html` |
 | erreurs 503, connexion coupée, image tronquée, planche 404 puis reprise | `errors.html`, `gone.html` |
+| annulation pendant le téléchargement puis reprise | `slow.html` |
+
+Tests de l'application graphique (`tests/test_gui.py`) : réactivité de la
+fenêtre pendant un téléchargement, états affichés, erreurs, annulation,
+fermeture pendant un travail. Ils sont ignorés sans `tkinter`/`customtkinter`
+(sous Linux, les lancer avec `xvfb-run`).
+
+Test réel, désactivé par défaut car il dépend du réseau :
+
+```powershell
+$env:OFFREADER_LIVE = "1"
+python -m pytest tests/test_live.py -v -s
+```
+
+Il vérifie, sur le chapitre 1 de *Boruto: Two Blue Vortex* (boruto-france.fr),
+le mode détecté, l'ordre des planches, la couverture complète de la
+numérotation, l'absence de parasites et la validité du CBZ.
 
 Pour explorer un lecteur de test à la main : `python -m tests.server`.
 
