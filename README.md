@@ -40,6 +40,20 @@ le mot de passe (le nom d'utilisateur est libre).
 > fichiers produits disparaissent au redémarrage : enregistrez vos CBZ dès
 > qu'ils sont prêts.
 
+### Héberger sur un serveur personnel (home server, NAS, Raspberry Pi)
+
+Sur une machine Linux avec Docker (PC x86-64 ou ARM 64 bits, 2 Go de mémoire
+conseillés), dans le dossier du projet :
+
+1. Modifier `OFFREADER_PASSWORD` dans `docker-compose.yml`.
+2. Lancer `docker compose up -d --build`.
+3. Ouvrir `http://IP-DU-SERVEUR:8000` depuis le réseau local.
+
+Le service redémarre tout seul avec la machine, et les CBZ sont conservés dans
+un volume Docker. Mise à jour : `git pull` puis `docker compose up -d --build`.
+Pour y accéder hors de chez soi, le plus sûr est un VPN comme Tailscale ou
+WireGuard, plutôt qu'ouvrir le port sur la box.
+
 ### Héberger ailleurs (Docker)
 
 Le `Dockerfile` fonctionne sur tout hébergeur de conteneurs (Fly.io, Railway,

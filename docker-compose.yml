@@ -1,0 +1,19 @@
+# Offreader sur un serveur personnel : docker compose up -d --build
+# puis ouvrir http://IP-DU-SERVEUR:8000
+services:
+  offreader:
+    build: .
+    container_name: offreader
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      OFFREADER_PASSWORD: "change-moi"  # mot de passe demandé par le navigateur
+      OFFREADER_MAX_PARALLEL: "2"  # chapitres traités en même temps (~400 Mo de mémoire chacun)
+      OFFREADER_RETENTION_HOURS: "72"
+    volumes:
+      - offreader-data:/data  # CBZ produits, conservés entre les redémarrages
+    shm_size: "512mb"
+
+volumes:
+  offreader-data:
