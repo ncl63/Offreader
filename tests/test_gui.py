@@ -53,7 +53,7 @@ def idle(app):
 
 
 def test_download_keeps_ui_responsive(app, server):
-    app.url_entry.insert(0, server.url("/sites/slow.html"))
+    app.url_entry.insert("1.0", server.url("/sites/slow.html"))
     app.main_button.invoke()
     assert app.main_button.cget("text") == "Annuler"
     assert app.open_button.cget("state") == "disabled"
@@ -84,7 +84,7 @@ def test_download_keeps_ui_responsive(app, server):
 
 
 def test_images_format(app, server, tmp_path):
-    app.url_entry.insert(0, server.url("/sites/vertical.html"))
+    app.url_entry.insert("1.0", server.url("/sites/vertical.html"))
     app.format_var.set("Images")
     app.main_button.invoke()
     pump(app, lambda: idle(app))
@@ -92,14 +92,14 @@ def test_images_format(app, server, tmp_path):
 
 
 def test_invalid_url_shows_error_without_job(app):
-    app.url_entry.insert(0, "pas une adresse")
+    app.url_entry.insert("1.0", "pas une adresse")
     app.main_button.invoke()
     assert app.job is None
     assert "http" in app.error_label.cget("text")
 
 
 def test_engine_error_is_shown(app, server):
-    app.url_entry.insert(0, server.url("/sites/empty.html"))
+    app.url_entry.insert("1.0", server.url("/sites/empty.html"))
     app.main_button.invoke()
     pump(app, lambda: idle(app))
     assert app.status_label.cget("text") == "Échec"
@@ -111,7 +111,7 @@ def test_engine_error_is_shown(app, server):
 def test_incomplete_chapter_message(server, tmp_path):
     a = App(config_factory=lambda: fast_config(tmp_path, max_retries=0), opener=lambda p: None)
     try:
-        a.url_entry.insert(0, server.url("/sites/gone.html"))
+        a.url_entry.insert("1.0", server.url("/sites/gone.html"))
         a.main_button.invoke()
         pump(a, lambda: idle(a))
         assert a.status_label.cget("text") == "Incomplet"
@@ -122,7 +122,7 @@ def test_incomplete_chapter_message(server, tmp_path):
 
 
 def test_cancel_button(app, server):
-    app.url_entry.insert(0, server.url("/sites/paged_infinite.html"))
+    app.url_entry.insert("1.0", server.url("/sites/paged_infinite.html"))
     app.main_button.invoke()
     pump(app, lambda: app.pages_label.cget("text").startswith("Pages : 3"))
     app.main_button.invoke()  # « Annuler »
@@ -133,7 +133,7 @@ def test_cancel_button(app, server):
 
 def test_close_window_during_download(server, tmp_path):
     a = App(config_factory=lambda: fast_config(tmp_path), opener=lambda p: None)
-    a.url_entry.insert(0, server.url("/sites/paged_infinite.html"))
+    a.url_entry.insert("1.0", server.url("/sites/paged_infinite.html"))
     a.main_button.invoke()
     pump(a, lambda: a.pages_label.cget("text").startswith("Pages : 2"))
     job = a.job
@@ -148,3 +148,27 @@ def test_close_window_during_download(server, tmp_path):
     assert job.join(10), "le moteur doit s'arrêter avec la fenêtre"
     with pytest.raises(tk.TclError):
         a.winfo_exists()
+
+
+def test_several_links_one_after_another(app, server):
+    links = [server.url("/sites/vertical.html"), server.url("/sites/empty.html"), server.url("/sites/paged_button.html")]
+    app.url_entry.insert("1.0", "\n".join(links) + "\n")
+    app.main_button.invoke()
+    statuses = set()
+    pump(app, lambda: statuses.add(app.status_label.cget("text")) or (idle(app) and not app.pending))
+    assert any(s.startswith("Lien 3 / 3") for s in statuses)
+    assert app.status_label.cget("text") == "Terminé avec des erreurs"
+    assert app.pages_label.cget("text") == "Chapitres : 2 / 3"
+    assert app.error_label.cget("text").startswith("Lien 2 : Aucune planche")
+    assert len(list(app.output.parent.glob("*.cbz"))) == 2
+    assert app.open_button.cget("state") == "normal"
+
+
+def test_cancel_stops_remaining_links(app, server):
+    app.url_entry.insert("1.0", server.url("/sites/paged_infinite.html") + "\n" + server.url("/sites/vertical.html"))
+    app.main_button.invoke()
+    pump(app, lambda: app.pages_label.cget("text").startswith("Pages : 2"))
+    app.main_button.invoke()
+    pump(app, lambda: idle(app), timeout=30)
+    assert app.status_label.cget("text") == "Annulé"
+    assert len(app.results) == 1 and app.pending == []  # le 2e lien n'a jamais démarré

@@ -3,6 +3,8 @@
 L'interface ne contient aucune logique d'extraction : elle crée un
 `DownloadJob` (moteur exécuté dans un thread) et lit ses messages toutes les
 100 ms. La fenêtre reste donc réactive pendant toute l'opération.
+
+Plusieurs liens (un par ligne) sont traités l'un après l'autre.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from . import __version__
 from .browser import use_bundled_browsers
 from .config import Config
 from .jobs import DownloadJob, JobMessage
+from .urls import parse_urls
 
 POLL_MS = 100
 ERROR_COLOR = ("#b3261e", "#f2b8b5")
@@ -63,16 +66,20 @@ class App(ctk.CTk):
         self.opener = opener
         self.job: DownloadJob | None = None
         self.output: Path | None = None
+        self.pending: list[str] = []  # liens restant à traiter
+        self.total_links = 0
+        self.results: list[JobMessage] = []
         self._closing = False
 
         self.title("Offreader")
-        self.geometry("620x250")
-        self.minsize(480, 250)
+        self.geometry("620x330")
+        self.minsize(480, 330)
         self.grid_columnconfigure(0, weight=1)
 
-        self.url_entry = ctk.CTkEntry(self, placeholder_text="URL du chapitre", height=36)
+        # Un lien par ligne ; Ctrl+Entrée lance le téléchargement.
+        self.url_entry = ctk.CTkTextbox(self, height=90, wrap="none")
         self.url_entry.grid(row=0, column=0, columnspan=3, sticky="ew", padx=16, pady=(16, 8))
-        self.url_entry.bind("<Return>", lambda e: self.on_main_button())
+        self.url_entry.bind("<Control-Return>", lambda e: (self.on_main_button(), "break")[1])
 
         self.format_var = ctk.StringVar(value="CBZ")
         self.format_choice = ctk.CTkSegmentedButton(self, values=["CBZ", "Images"], variable=self.format_var)
@@ -116,30 +123,45 @@ class App(ctk.CTk):
 
     def on_main_button(self) -> None:
         if self.job and self.job.running:
+            self.pending.clear()  # annule aussi les liens suivants
             self.job.cancel()
             self.main_button.configure(state="disabled", text="Annulation...")
             return
         self.start_download()
 
     def start_download(self) -> None:
-        url = self.url_entry.get().strip()
-        if not url.lower().startswith(("http://", "https://")):
-            self.show_error("Collez une adresse commençant par http:// ou https://")
+        urls, rejected = parse_urls(self.url_entry.get("1.0", "end"))
+        if not urls or rejected:
+            bad = f" (« {rejected[0]} »)" if rejected else ""
+            self.show_error(f"Collez une adresse commençant par http:// ou https://{bad}, une par ligne.")
             return
-        config = self.config_factory()
-        config.format = "cbz" if self.format_var.get() == "CBZ" else "images"
+        self.pending = list(urls)
+        self.total_links = len(urls)
+        self.results = []
         self.output = None
         self.show_error("")
         self.open_button.configure(state="disabled")
-        self.pages_label.configure(text="")
-        self.status_label.configure(text="Analyse du lecteur...")
-        self.progress.configure(mode="indeterminate")
-        self.progress.start()
         self.main_button.configure(text="Annuler")
         self.url_entry.configure(state="disabled")
         self.format_choice.configure(state="disabled")
+        self._start_next()
+
+    def _start_next(self) -> None:
+        url = self.pending.pop(0)
+        config = self.config_factory()
+        config.format = "cbz" if self.format_var.get() == "CBZ" else "images"
+        self.pages_label.configure(text="")
+        self.status_label.configure(text=self._prefix() + "Analyse du lecteur...")
+        self.progress.configure(mode="indeterminate")
+        self.progress.start()
         logging.getLogger(__name__).info("Téléchargement de %s (%s)", url, config.format)
         self.job = DownloadJob(url, config).start()
+
+    def _prefix(self) -> str:
+        """« Lien 2 / 5 · » quand plusieurs liens sont traités."""
+        if self.total_links < 2:
+            return ""
+        return f"Lien {self.total_links - len(self.pending)} / {self.total_links} · "
 
     def on_open(self) -> None:
         if self.output:
@@ -190,13 +212,25 @@ class App(ctk.CTk):
                     self.progress.configure(mode="determinate")
                 self.progress.set(e.current / e.total if e.total else 1)
                 self.pages_label.configure(text=f"Pages : {e.current} / {e.total}")
-                self.status_label.configure(text="Téléchargement...")
+                self.status_label.configure(text=self._prefix() + "Téléchargement...")
             elif e.kind == "mode":
-                self.status_label.configure(text=f"Lecteur : {e.message}")
+                self.status_label.configure(text=f"{self._prefix()}Lecteur : {e.message}")
             elif e.kind == "warning":
                 self.show_error(e.message)
             else:
-                self.status_label.configure(text=e.message)
+                self.status_label.configure(text=self._prefix() + e.message)
+            return
+
+        # Fin d'un lien : on passe au suivant, sauf annulation.
+        self.results.append(msg)
+        if msg.output is not None:
+            self.output = msg.output
+        if self.pending and msg.kind != "cancelled":
+            self.progress.stop()
+            self._start_next()
+            return
+        if self.total_links > 1:
+            self._show_summary()
             return
 
         # Fin du travail, quelle qu'en soit l'issue.
@@ -223,6 +257,27 @@ class App(ctk.CTk):
             self.progress.set(0)
             self.status_label.configure(text="Échec")
             self.show_error(msg.text)
+
+    def _show_summary(self) -> None:
+        """Bilan de plusieurs liens."""
+        self.progress.stop()
+        self.progress.configure(mode="determinate")
+        self.main_button.configure(state="normal", text="Télécharger")
+        self.url_entry.configure(state="normal")
+        self.format_choice.configure(state="normal")
+        done = sum(m.kind == "done" for m in self.results)
+        cancelled = any(m.kind == "cancelled" for m in self.results)
+        self.progress.set(done / self.total_links)
+        self.pages_label.configure(text=f"Chapitres : {done} / {self.total_links}")
+        if cancelled:
+            self.status_label.configure(text="Annulé")
+        else:
+            self.status_label.configure(text="Terminé" if done == self.total_links else "Terminé avec des erreurs")
+        failures = [f"Lien {n} : {m.text.splitlines()[0]}" for n, m in enumerate(self.results, 1)
+                    if m.kind in ("error", "incomplete")]
+        self.show_error("\n".join(failures))
+        if self.output:
+            self.open_button.configure(state="normal")
 
 
 def main() -> None:

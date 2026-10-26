@@ -12,12 +12,69 @@ génériques couvrent les lecteurs les plus courants.
 | **Défilement vertical** (toutes les planches dans la page) | défilement progressif pour déclencher le lazy loading, tri des images par structure DOM, position et dimensions, déduplication |
 | **Page par page** (une planche à la fois) | repérage de l'image principale, puis navigation automatique : bouton « suivant », touches ← / →, clic sur l'image, numéro de page dans l'URL, liste déroulante des pages |
 
+## Version en ligne (navigateur web)
+
+Offreader peut aussi tourner sur un serveur : on l'utilise alors depuis
+n'importe quel navigateur (PC, Mac, téléphone), sans rien installer.
+
+Collez **un ou plusieurs liens** (un par ligne), choisissez **CBZ** ou
+**Images (ZIP)**, cliquez sur **Télécharger**. Chaque lien apparaît dans la
+liste avec sa progression ; **Enregistrer** récupère le fichier, **Tout
+télécharger (ZIP)** regroupe tous les chapitres terminés, **Reprendre** relance
+un chapitre annulé ou incomplet là où il s'était arrêté.
+
+### Héberger sur Render (gratuit, quelques clics)
+
+1. Créer un compte sur <https://render.com> et le relier à GitHub.
+2. **New +** → **Blueprint** → choisir ce dépôt (le fichier `render.yaml` est lu
+   automatiquement).
+3. Saisir un mot de passe pour **`OFFREADER_PASSWORD`**, puis **Apply**.
+
+Après la construction (5 à 10 minutes la première fois), le site est en ligne à
+une adresse du type `https://offreader-xxxx.onrender.com`. Le navigateur demande
+le mot de passe (le nom d'utilisateur est libre).
+
+> Offre gratuite de Render : le service s'endort après 15 minutes sans visite
+> (le premier chargement suivant prend environ une minute), 512 Mo de mémoire
+> (un chapitre traité à la fois, les autres attendent dans la file), et les
+> fichiers produits disparaissent au redémarrage : enregistrez vos CBZ dès
+> qu'ils sont prêts.
+
+### Héberger ailleurs (Docker)
+
+Le `Dockerfile` fonctionne sur tout hébergeur de conteneurs (Fly.io, Railway,
+Koyeb, un VPS…) :
+
+```sh
+docker build -t offreader-web .
+docker run -p 8000:8000 -e OFFREADER_PASSWORD=monmotdepasse -v offreader-data:/data offreader-web
+```
+
+puis ouvrir <http://localhost:8000>.
+
+| Variable | Rôle | Défaut |
+|---|---|---|
+| `OFFREADER_PASSWORD` | mot de passe du site (**à définir** dès que le site est public) | aucun |
+| `OFFREADER_MAX_PARALLEL` | chapitres traités en même temps (un Chromium chacun) | 2 |
+| `OFFREADER_RETENTION_HOURS` | durée de conservation des fichiers sur le serveur | 24 |
+| `OFFREADER_MAX_URLS` | liens acceptés par envoi | 50 |
+| `OFFREADER_DATA_DIR` | dossier des fichiers produits | `/data` (Docker) |
+| `PORT` | port d'écoute | 8000 |
+
+Sans Docker : `pip install -r requirements-web.txt`, `playwright install chromium`,
+puis `python -m offreader.web`.
+
+> Certains sites bloquent les adresses IP des hébergeurs (centres de données) :
+> si un lien fonctionne dans l'application Windows mais pas en ligne, c'est
+> probablement la raison.
+
 ## Application Windows
 
 ![Offreader](docs/offreader.png)
 
-Collez l'URL du chapitre, choisissez **CBZ** ou **Images**, cliquez sur
-**Télécharger**. À la fin, **Ouvrir le dossier** affiche le fichier dans
+Collez l'URL du chapitre (ou plusieurs, une par ligne : elles sont traitées
+l'une après l'autre), choisissez **CBZ** ou **Images**, cliquez sur
+**Télécharger** (ou Ctrl+Entrée). À la fin, **Ouvrir le dossier** affiche le fichier dans
 l'Explorateur. Le bouton devient **Annuler** pendant le travail ; un
 téléchargement annulé ou incomplet reprend là où il s'était arrêté.
 
@@ -78,6 +135,14 @@ python offreader_gui.pyw          # application graphique
 python manga_downloader.py "URL_DU_CHAPITRE" --format cbz
 ```
 
+Plusieurs chapitres d'un coup : donner plusieurs URL, ou un fichier texte
+contenant une URL par ligne :
+
+```powershell
+python manga_downloader.py "URL_1" "URL_2" "URL_3"
+python manga_downloader.py --file liens.txt
+```
+
 Le fichier `Nom_du_chapitre.cbz` est créé dans `Téléchargements` (`%USERPROFILE%\Downloads`).
 Le nom vient du titre de la page ; `--name` permet de le choisir.
 
@@ -97,7 +162,8 @@ Terminé : 20 planches -> C:\Users\moi\Downloads\Mon chapitre.cbz
 |---|---|---|
 | `--format cbz\|images` | archive CBZ, ou dossier `001.webp`, `002.jpg`… | `cbz` |
 | `--output DOSSIER` | dossier de destination | `~\Downloads` |
-| `--name NOM` | nom du chapitre (fichier ou dossier) | titre de la page |
+| `--file FICHIER` | fichier texte : une URL par ligne (s'ajoute aux URL données) | — |
+| `--name NOM` | nom du chapitre (fichier ou dossier), avec un seul lien | titre de la page |
 | `--headless` / `--no-headless` | masquer / afficher Chromium | masqué |
 | `--mode auto\|vertical\|paged` | imposer le type de lecteur | `auto` |
 | `--max-pages N` | nombre maximal de pages en mode page par page | 500 |
@@ -118,6 +184,9 @@ pilotable pendant l'analyse.
 | 1 | erreur (page inaccessible, aucune planche trouvée, Chromium absent…) |
 | 2 | chapitre incomplet : au moins une planche n'a pas pu être téléchargée, ou le lecteur annonce plus de pages que trouvées. **Aucun CBZ n'est créé** ; les planches obtenues sont conservées et la même commande reprend là où elle s'est arrêtée |
 | 130 | interruption (Ctrl+C) ; relancer pour reprendre |
+
+Avec plusieurs liens, tous sont traités même si l'un échoue ; le code de
+sortie est le plus grave rencontré et un bilan s'affiche à la fin.
 
 ## Fiabilité
 
@@ -151,11 +220,15 @@ pilotable pendant l'analyse.
 ```
 manga_downloader.py         point d'entrée CLI
 offreader_gui.pyw           point d'entrée de l'application graphique
+Dockerfile, render.yaml     hébergement de la version en ligne
 Offreader.bat               lanceur Windows (installation automatique au 1er lancement)
 build_exe.bat               construction de dist\Offreader\Offreader.exe (PyInstaller)
 packaging/offreader.spec    spécification PyInstaller
 offreader/
 ├── gui.py                  fenêtre CustomTkinter (aucune logique d'extraction)
+├── web.py                  version en ligne : serveur FastAPI, file de travaux, mot de passe
+├── static/index.html       page web (HTML + JavaScript, sans dépendance)
+├── urls.py                 lecture d'une liste de liens collée (un par ligne)
 ├── jobs.py                 moteur dans un thread + file de messages vers l'interface
 ├── cli.py                  arguments, affichage de la progression, codes de sortie
 ├── engine.py               orchestration : analyse → téléchargement → vérification → export
@@ -213,7 +286,7 @@ stratégies génériques ; téléchargement et export restent inchangés.
 ## Tests
 
 ```powershell
-pip install -r requirements-dev.txt -r requirements-gui.txt
+pip install -r requirements-dev.txt -r requirements-gui.txt -r requirements-web.txt
 python -m pytest
 ```
 
@@ -239,6 +312,10 @@ et l'arrêt du programme :
 | lecteur bloqué, lecteur infini (limite de pages) | `paged_stuck.html`, `paged_infinite.html` |
 | erreurs 503, connexion coupée, image tronquée, planche 404 puis reprise | `errors.html`, `gone.html` |
 | annulation pendant le téléchargement puis reprise | `slow.html` |
+
+Tests de la version en ligne (`tests/test_web.py`) : plusieurs liens d'un
+coup, limite de chapitres simultanés, CBZ et ZIP d'images servis, archive
+groupée, annulation puis reprise, suppression, mot de passe.
 
 Tests de l'application graphique (`tests/test_gui.py`) : réactivité de la
 fenêtre pendant un téléchargement, états affichés, erreurs, annulation,

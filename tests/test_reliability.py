@@ -88,3 +88,14 @@ def test_cli_error_exit_codes(server, tmp_path):
     proc = _cli(server, tmp_path, server.url("/n-existe-pas"))
     assert proc.returncode == 1
     assert "404" in proc.stdout
+
+
+def test_cli_several_links(server, tmp_path):
+    links = tmp_path / "liens.txt"
+    links.write_text(server.url("/sites/paged_button.html") + "\n\n" + server.url("/sites/empty.html") + "\n",
+                     encoding="utf-8")
+    proc = _cli(server, tmp_path, server.url("/sites/vertical.html"), "--file", str(links))
+    assert proc.returncode == 1, proc.stdout + proc.stderr  # un des trois liens échoue
+    assert "[1/3]" in proc.stdout and "[3/3]" in proc.stdout
+    assert "Bilan : 2 / 3 chapitre(s) terminé(s)" in proc.stdout
+    assert len(list(tmp_path.glob("*.cbz"))) == 2

@@ -1,0 +1,14 @@
+# Déploiement sur Render (https://render.com) : New + > Blueprint > choisir ce dépôt.
+services:
+  - type: web
+    name: offreader
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: OFFREADER_PASSWORD
+        sync: false  # demandé lors de la création du service
+      - key: OFFREADER_MAX_PARALLEL
+        value: "1"  # l'offre gratuite n'a que 512 Mo de mémoire
+      - key: OFFREADER_RETENTION_HOURS
+        value: "24"

@@ -86,6 +86,8 @@ class BrowserSession:
         4. en dernier recours, téléchargement automatique de Chromium, puis nouvel essai.
         """
         base = {"headless": self.config.headless}
+        if sys.platform.startswith("linux"):  # conteneurs Docker : /dev/shm souvent trop petit
+            base["args"] = ["--disable-dev-shm-usage"]
         proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
         if proxy:  # proxy explicite (réseau d'entreprise) ; sinon réglages système
             no_proxy = os.environ.get("NO_PROXY") or os.environ.get("no_proxy") or ""

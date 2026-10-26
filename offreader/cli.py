@@ -14,6 +14,7 @@ from .config import Config, default_output_dir
 from .engine import run
 from .errors import IncompleteChapter, OffreaderError
 from .models import ProgressEvent
+from .urls import parse_urls
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -21,11 +22,12 @@ def build_parser() -> argparse.ArgumentParser:
         prog="manga_downloader",
         description="Extrait les planches d'un lecteur web, dans l'ordre, vers un dossier ou un CBZ.",
     )
-    p.add_argument("url", help="URL du chapitre à télécharger")
+    p.add_argument("urls", nargs="*", metavar="URL", help="URL du ou des chapitres à télécharger")
+    p.add_argument("--file", "-f", type=Path, help="fichier texte contenant une URL par ligne")
     p.add_argument("--format", choices=["cbz", "images"], default="cbz", help="format de sortie (défaut : cbz)")
     p.add_argument("--output", type=Path, default=None,
                    help=f"dossier de destination (défaut : {default_output_dir()})")
-    p.add_argument("--name", help="nom du chapitre (défaut : titre de la page)")
+    p.add_argument("--name", help="nom du chapitre, pour un seul lien (défaut : titre de la page)")
     p.add_argument("--headless", action=argparse.BooleanOptionalAction, default=True,
                    help="masquer Chromium (défaut) ; --no-headless pour l'afficher")
     p.add_argument("--mode", choices=["auto", "vertical", "paged"], default="auto",
@@ -100,9 +102,43 @@ def main(argv: list[str] | None = None) -> int:
                         format="%(levelname)s %(name)s: %(message)s")
     if not args.verbose:
         logging.getLogger("httpx").setLevel(logging.WARNING)
+    urls, rejected = parse_urls(" ".join(args.urls))
+    if args.file:
+        try:
+            more, bad = parse_urls(args.file.read_text(encoding="utf-8-sig"))
+        except OSError as exc:
+            print(f"Erreur : impossible de lire {args.file} : {exc}", file=sys.stderr)
+            return 1
+        urls += [u for u in more if u not in urls]
+        rejected += bad
+    if rejected:
+        print(f"Ignoré (pas une adresse http/https) : {', '.join(rejected)}", file=sys.stderr)
+    if not urls:
+        build_parser().error("indiquez au moins une URL (ou --file liste.txt)")
+    if args.name and len(urls) > 1:
+        build_parser().error("--name ne s'utilise qu'avec un seul lien")
+
     progress = ConsoleProgress()
+    codes = []
+    for n, url in enumerate(urls, 1):
+        if len(urls) > 1:
+            progress.line(f"\n[{n}/{len(urls)}] {url}")
+        code = download_one(url, args, progress)
+        codes.append(code)
+        if code == 130:
+            break
+    if len(urls) > 1:
+        ok = codes.count(0)
+        progress.line(f"\nBilan : {ok} / {len(urls)} chapitre(s) terminé(s)"
+                      + ("" if ok == len(urls) else f", {len(urls) - ok} en échec ou incomplet(s)"))
+    if 130 in codes:
+        return 130
+    return max(codes) if codes else 0
+
+
+def download_one(url: str, args: argparse.Namespace, progress: ConsoleProgress) -> int:
     try:
-        result = asyncio.run(run(args.url, config_from_args(args), progress))
+        result = asyncio.run(run(url, config_from_args(args), progress))
     except IncompleteChapter as exc:
         progress.line(f"Incomplet : {exc}")
         return 2

@@ -7,3 +7,4 @@ build/
 dist/
 *.part
 .venv-build/
+offreader-data/

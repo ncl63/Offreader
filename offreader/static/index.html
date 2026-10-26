@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offreader</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --card: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #e2e2e0;
+    --accent: #2f5bd3; --accent-text: #ffffff; --ok: #1f7a3d; --warn: #9a6100; --err: #b3261e;
+    --bar: #e8e8ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151517; --card: #1f1f22; --text: #ececee; --muted: #9b9ba3; --line: #313136;
+      --accent: #7c9dff; --accent-text: #0d1020; --ok: #6fd08e; --warn: #f0b85a; --err: #f2b8b5;
+      --bar: #2c2c31;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 820px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  textarea { width: 100%; min-height: 130px; resize: vertical; padding: 10px 12px; border-radius: 8px;
+             border: 1px solid var(--line); background: var(--bg); color: var(--text);
+             font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  .spacer { flex: 1; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg label { padding: 7px 14px; cursor: pointer; user-select: none; }
+  .seg input { display: none; }
+  .seg input:checked + span { color: var(--accent); font-weight: 600; }
+  .seg label + label { border-left: 1px solid var(--line); }
+  button, .btn { font: inherit; border-radius: 8px; padding: 8px 16px; cursor: pointer; text-decoration: none;
+                 border: 1px solid var(--line); background: transparent; color: var(--text); display: inline-block; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .55; cursor: default; }
+  .small { padding: 4px 10px; font-size: 13px; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .error { color: var(--err); font-size: 14px; white-space: pre-line; margin-top: 10px; }
+  .error:empty { display: none; }
+  h2 { font-size: 17px; margin: 32px 0 10px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  #jobs { display: grid; gap: 10px; }
+  .job { padding: 12px 14px; }
+  .job-head { display: flex; gap: 10px; align-items: baseline; }
+  .job-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .job-url { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; }
+  .s-queued, .s-running { color: var(--accent); } .s-done { color: var(--ok); }
+  .s-incomplete, .s-cancelled { color: var(--warn); } .s-error { color: var(--err); }
+  .bar { height: 6px; background: var(--bar); border-radius: 99px; overflow: hidden; margin: 10px 0 6px; }
+  .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+  .bar.indet > div { width: 30%; animation: slide 1.2s infinite ease-in-out; }
+  @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+  .job-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .job-msg { color: var(--err); font-size: 13px; white-space: pre-line; margin-top: 6px; max-height: 6.5em; overflow: auto; }
+  .job-msg.warn { color: var(--warn); }
+  .empty { color: var(--muted); text-align: center; padding: 24px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Offreader</h1>
+  <p class="sub">Collez un ou plusieurs liens de chapitres : les planches sont récupérées dans l'ordre et exportées en CBZ ou en images.</p>
+
+  <form class="card" id="form">
+    <textarea id="urls" placeholder="https://exemple.com/manga/chapitre-1&#10;https://exemple.com/manga/chapitre-2&#10;…" aria-label="Liens des chapitres, un par ligne" required></textarea>
+    <div class="row">
+      <div class="seg" role="radiogroup" aria-label="Format">
+        <label><input type="radio" name="format" value="cbz" checked><span>CBZ</span></label>
+        <label><input type="radio" name="format" value="images"><span>Images (ZIP)</span></label>
+      </div>
+      <span class="hint" id="count">Un lien par ligne</span>
+      <span class="spacer"></span>
+      <button class="primary" id="submit" type="submit">Télécharger</button>
+    </div>
+    <div class="error" id="form-error"></div>
+  </form>
+
+  <h2>Téléchargements
+    <span class="spacer"></span>
+    <a class="btn small" id="zip-all" href="api/archive" hidden>Tout télécharger (ZIP)</a>
+    <button class="small" id="clear" type="button" hidden>Effacer les terminés</button>
+  </h2>
+  <div id="jobs"><div class="empty">Aucun téléchargement pour l'instant.</div></div>
+  <p class="hint" id="retention"></p>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const LABELS = { queued: "En file", running: "En cours", done: "Terminé", incomplete: "Incomplet",
+                 error: "Échec", cancelled: "Annulé" };
+const ACTIVE = new Set(["queued", "running"]);
+let jobs = [];
+
+function countLinks() {
+  const n = $("#urls").value.split(/\s+/).filter((t) => /^https?:\/\/./i.test(t)).length;
+  $("#count").textContent = n > 1 ? `${n} liens` : n === 1 ? "1 lien" : "Un lien par ligne";
+}
+$("#urls").addEventListener("input", countLinks);
+
+async function api(path, options = {}) {
+  const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
+  if (!r.ok) {
+    let detail = r.statusText;
+    try { detail = (await r.json()).detail || detail; } catch {}
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+  return r.json();
+}
+
+$("#form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const button = $("#submit");
+  $("#form-error").textContent = "";
+  button.disabled = true;
+  try {
+    const format = document.querySelector("input[name=format]:checked").value;
+    const res = await api("api/jobs", { method: "POST", body: JSON.stringify({ urls: $("#urls").value, format }) });
+    $("#urls").value = "";
+    countLinks();
+    if (res.rejected.length) {
+      $("#form-error").textContent = "Ignoré (pas une adresse http/https) : " + res.rejected.slice(0, 5).join(", ")
+        + (res.rejected.length > 5 ? "…" : "");
+    }
+    await refresh();
+  } catch (e) {
+    $("#form-error").textContent = e.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") node.className = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v);
+  }
+  node.append(...children.filter((c) => c !== null && c !== undefined));
+  return node;
+}
+
+function action(label, fn) {
+  return el("button", { class: "small", type: "button", onclick: async (e) => {
+    e.target.disabled = true;
+    try { await fn(); } catch (err) { alert(err.message); }
+    await refresh();
+  } }, label);
+}
+
+function render() {
+  const box = $("#jobs");
+  box.replaceChildren();
+  if (!jobs.length) box.append(el("div", { class: "empty" }, "Aucun téléchargement pour l'instant."));
+  for (const j of jobs) {
+    const active = ACTIVE.has(j.status);
+    const pct = j.total ? Math.round((100 * j.current) / j.total) : 0;
+    const indet = j.status === "running" && j.step !== "Téléchargement...";
+    const bar = el("div", { class: "bar" + (indet ? " indet" : "") }, el("div"));
+    if (!indet) bar.firstChild.style.width = (j.status === "done" ? 100 : pct) + "%";
+    const pages = j.total ? `${j.current} / ${j.total} pages` : j.current ? `${j.current} pages` : "";
+    const info = [j.step, j.mode && `lecteur : ${j.mode}`, pages].filter(Boolean).join(" · ");
+    const foot = el("div", { class: "job-foot" }, el("span", { class: "hint" }, info), el("span", { class: "spacer" }));
+    if (j.download) foot.append(el("a", { class: "btn small", href: j.download, download: "" }, "Enregistrer"));
+    if (active) foot.append(action("Annuler", () => api(`api/jobs/${j.id}/cancel`, { method: "POST" })));
+    if (["incomplete", "error", "cancelled"].includes(j.status))
+      foot.append(action("Reprendre", () => api(`api/jobs/${j.id}/retry`, { method: "POST" })));
+    if (!active) foot.append(action("Supprimer", () => api(`api/jobs/${j.id}`, { method: "DELETE" })));
+    box.append(el("div", { class: "card job" },
+      el("div", { class: "job-head" },
+        el("div", { class: "job-title", title: j.name || j.url }, j.name || j.url),
+        el("span", { class: `badge s-${j.status}` }, LABELS[j.status] || j.status)),
+      j.name ? el("div", { class: "job-url" }, j.url) : null,
+      bar, foot,
+      j.message ? el("div", { class: "job-msg" + (j.status === "done" ? " warn" : "") }, j.message) : null));
+  }
+  const done = jobs.filter((j) => j.status === "done");
+  $("#zip-all").hidden = done.length < 2;
+  $("#zip-all").href = "api/archive?ids=" + done.map((j) => j.id).join(",");
+  $("#clear").hidden = !jobs.some((j) => !ACTIVE.has(j.status));
+}
+
+$("#clear").addEventListener("click", async () => {
+  if (!confirm("Supprimer du serveur tous les téléchargements terminés ?")) return;
+  for (const j of jobs.filter((j) => !ACTIVE.has(j.status))) {
+    try { await api(`api/jobs/${j.id}`, { method: "DELETE" }); } catch {}
+  }
+  await refresh();
+});
+
+let timer = null;
+async function refresh() {
+  clearTimeout(timer);
+  try {
+    const data = await api("api/jobs");
+    const changed = JSON.stringify(data.jobs) !== JSON.stringify(jobs);
+    jobs = data.jobs;
+    $("#retention").textContent = `Les fichiers sont conservés ${data.retention_hours} h sur le serveur. `
+      + `Jusqu'à ${data.max_urls} liens par envoi.`;
+    if (changed) render();
+  } catch (e) {
+    $("#form-error").textContent = "Serveur injoignable : " + e.message;
+  }
+  timer = setTimeout(refresh, jobs.some((j) => ACTIVE.has(j.status)) ? 1000 : 4000);
+}
+refresh();
+</script>
+</body>
+</html>
